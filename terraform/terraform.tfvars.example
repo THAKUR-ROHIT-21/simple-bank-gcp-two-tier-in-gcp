@@ -1,0 +1,14 @@
+project_id = "project-03803aec-3f89-45cb-896"
+region = "asia-south1"
+zone = "asia-south1-a"
+environment = "dev"
+ssh_user = "rohit"
+ssh_public_key_path = "/home/your-user/.ssh/simple-bank-gcp.pub"
+# Demo only. Use IAP or a fixed runner IP in production.
+allowed_ssh_cidrs = ["0.0.0.0/0"]
+frontend_machine_type = "e2-micro"
+backend_machine_type = "e2-micro"
+frontend_subnet_cidr = "10.20.1.0/24"
+backend_subnet_cidr = "10.20.2.0/24"
+frontend_private_ip = "10.20.1.10"
+backend_private_ip = "10.20.2.10"

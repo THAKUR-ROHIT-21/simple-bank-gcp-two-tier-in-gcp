@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Simple Bank registration and account lookup demo">
+  <title>Simple Bank | Digital Account</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <span class="brand-mark">SB</span>
+      <span><strong>Simple Bank</strong><small>Digital Banking Demo</small></span>
+    </a>
+    <span class="secure-badge">Secure Demo Portal</span>
+  </header>
+
+  <main class="page-shell">
+    <section class="hero">
+      <div>
+        <span class="eyebrow">FAST • SIMPLE • DIGITAL</span>
+        <h1>Find your account or create a new one.</h1>
+        <p>Enter your email. Existing customers see their dashboard; new customers see registration.</p>
+      </div>
+      <div class="hero-card">
+        <div><strong>24×7</strong><span>Digital access</span></div>
+        <div><strong>₹1,000</strong><span>Demo opening balance</span></div>
+        <div><strong>2-Tier</strong><span>GCP architecture</span></div>
+      </div>
+    </section>
+
+    <section class="portal-card" aria-live="polite">
+      <div id="messageBox" class="message hidden"></div>
+
+      <section id="lookupSection">
+        <div class="section-heading"><span class="step">1</span><div><h2>Account lookup</h2><p>Use your registered email address.</p></div></div>
+        <form id="lookupForm">
+          <label for="lookupEmail">Email address</label>
+          <div class="inline-form">
+            <input id="lookupEmail" type="email" placeholder="rohit@example.com" autocomplete="email" required>
+            <button type="submit">Check account</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="registrationSection" class="hidden">
+        <div class="section-heading"><span class="step">2</span><div><h2>Create your account</h2><p>No account was found. Complete registration.</p></div></div>
+        <form id="registrationForm" class="registration-grid">
+          <div class="field full-width"><label for="fullName">Full name</label><input id="fullName" name="full_name" minlength="3" required></div>
+          <div class="field"><label for="registrationEmail">Email address</label><input id="registrationEmail" name="email" type="email" readonly required></div>
+          <div class="field"><label for="phone">Mobile number</label><input id="phone" name="phone" type="tel" pattern="[0-9]{10}" maxlength="10" placeholder="9876543210" required></div>
+          <div class="field full-width"><label for="accountType">Account type</label><select id="accountType" name="account_type"><option>Savings</option><option>Current</option></select></div>
+          <div class="button-row full-width"><button type="button" class="secondary" id="cancelRegistration">Back</button><button type="submit">Create account</button></div>
+        </form>
+      </section>
+
+      <section id="dashboardSection" class="hidden">
+        <div class="dashboard-heading"><div><span class="eyebrow">ACCOUNT FOUND</span><h2 id="welcomeName">Welcome</h2><p>Your account information is shown below.</p></div><button class="secondary" id="searchAnother">Search another</button></div>
+        <div class="balance-card"><span>Available balance</span><strong id="balanceValue">₹0.00</strong><small>Demo balance only</small></div>
+        <div class="account-grid">
+          <article><span>Account number</span><strong id="accountNumber">—</strong></article>
+          <article><span>Account type</span><strong id="accountTypeValue">—</strong></article>
+          <article><span>Email</span><strong id="emailValue">—</strong></article>
+          <article><span>Mobile number</span><strong id="phoneValue">—</strong></article>
+          <article><span>Branch</span><strong id="branchValue">—</strong></article>
+          <article><span>IFSC code</span><strong id="ifscValue">—</strong></article>
+        </div>
+      </section>
+    </section>
+  </main>
+  <footer>Simple Bank is a DevOps demo. Do not use real banking information.</footer>
+  <script src="/app.js"></script>
+</body>
+</html>

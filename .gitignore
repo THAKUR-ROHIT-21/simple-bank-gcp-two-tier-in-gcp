@@ -1,0 +1,15 @@
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
+.env
+*.pem
+*.key
+gha-creds-*.json
+__pycache__/
+*.py[cod]
+*.swp
+*.swo
+.vscode/
+.idea/

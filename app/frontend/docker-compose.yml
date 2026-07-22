@@ -1,0 +1,7 @@
+services:
+  frontend:
+    build: .
+    container_name: simple-bank-frontend
+    restart: unless-stopped
+    env_file: [.env]
+    ports: ["80:80"]

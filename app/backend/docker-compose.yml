@@ -1,0 +1,7 @@
+services:
+  backend:
+    build: .
+    container_name: simple-bank-backend
+    restart: unless-stopped
+    env_file: [.env]
+    ports: ["5000:5000"]

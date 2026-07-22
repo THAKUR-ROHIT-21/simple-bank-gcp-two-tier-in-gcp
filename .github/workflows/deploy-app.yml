@@ -1,0 +1,127 @@
+name: Deploy Simple Bank Application
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/deploy-app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: simple-bank-deployment
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    env:
+      FRONTEND_HOST: ${{ secrets.FRONTEND_HOST }}
+      BACKEND_PRIVATE_IP: ${{ secrets.BACKEND_PRIVATE_IP }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      GCP_SSH_KEY_B64: ${{ secrets.GCP_SSH_KEY_B64 }}
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      MONGO_DB_NAME: ${{ secrets.MONGO_DB_NAME }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in FRONTEND_HOST BACKEND_PRIVATE_IP SSH_USER GCP_SSH_KEY_B64 MONGO_URI MONGO_DB_NAME; do
+            if [ -z "${!name:-}" ]; then
+              echo "ERROR: ${name} is empty"
+              exit 1
+            fi
+          done
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s' "$GCP_SSH_KEY_B64" | tr -d '\r\n ' | base64 --decode > "$HOME/.ssh/simple-bank-gcp"
+          chmod 600 "$HOME/.ssh/simple-bank-gcp"
+          ssh-keygen -y -f "$HOME/.ssh/simple-bank-gcp" > /dev/null
+          ssh-keyscan -H "$FRONTEND_HOST" >> "$HOME/.ssh/known_hosts"
+
+      - name: Test SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="$HOME/.ssh/simple-bank-gcp"
+          ssh -i "$KEY" -o IdentitiesOnly=yes "${SSH_USER}@${FRONTEND_HOST}" "echo 'Frontend SSH OK'"
+          ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -J "${SSH_USER}@${FRONTEND_HOST}" "${SSH_USER}@${BACKEND_PRIVATE_IP}" "echo 'Backend SSH OK'"
+
+      - name: Upload and deploy backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="$HOME/.ssh/simple-bank-gcp"
+          rsync -az --delete --exclude '.env' \
+            -e "ssh -i ${KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -J ${SSH_USER}@${FRONTEND_HOST}" \
+            app/backend/ "${SSH_USER}@${BACKEND_PRIVATE_IP}:/opt/simple-bank/backend/"
+
+          {
+            printf 'MONGO_URI=%s\n' "$MONGO_URI"
+            printf 'MONGO_DB_NAME=%s\n' "$MONGO_DB_NAME"
+            printf 'PORT=5000\n'
+          } > /tmp/backend.env
+          chmod 600 /tmp/backend.env
+
+          scp -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no \
+            -o ProxyJump="${SSH_USER}@${FRONTEND_HOST}" \
+            /tmp/backend.env "${SSH_USER}@${BACKEND_PRIVATE_IP}:/opt/simple-bank/backend/.env"
+
+          ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no \
+            -J "${SSH_USER}@${FRONTEND_HOST}" "${SSH_USER}@${BACKEND_PRIVATE_IP}" \
+            'cd /opt/simple-bank/backend && docker compose up -d --build --remove-orphans && docker compose ps'
+
+      - name: Check backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="$HOME/.ssh/simple-bank-gcp"
+          ssh -i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no \
+            -J "${SSH_USER}@${FRONTEND_HOST}" "${SSH_USER}@${BACKEND_PRIVATE_IP}" \
+            'for i in $(seq 1 12); do curl -fsS http://127.0.0.1:5000/api/health && exit 0; sleep 5; done; docker compose -f /opt/simple-bank/backend/docker-compose.yml logs --tail=100; exit 1'
+
+      - name: Upload and deploy frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="$HOME/.ssh/simple-bank-gcp"
+          rsync -az --delete --exclude '.env' \
+            -e "ssh -i ${KEY} -o IdentitiesOnly=yes" \
+            app/frontend/ "${SSH_USER}@${FRONTEND_HOST}:/opt/simple-bank/frontend/"
+
+          printf 'BACKEND_PRIVATE_IP=%s\n' "$BACKEND_PRIVATE_IP" > /tmp/frontend.env
+          chmod 600 /tmp/frontend.env
+          scp -i "$KEY" -o IdentitiesOnly=yes /tmp/frontend.env \
+            "${SSH_USER}@${FRONTEND_HOST}:/opt/simple-bank/frontend/.env"
+
+          ssh -i "$KEY" -o IdentitiesOnly=yes "${SSH_USER}@${FRONTEND_HOST}" \
+            'cd /opt/simple-bank/frontend && docker compose up -d --build --remove-orphans && docker compose ps'
+
+      - name: End-to-end health check
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            if curl -fsS "http://${FRONTEND_HOST}/api/health"; then
+              echo
+              echo "Deployment successful: http://${FRONTEND_HOST}"
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
