@@ -13,20 +13,25 @@ jobs:
     environment: dev
 
     steps:
-      ####################################################
-<<<<<<< HEAD
-      # Checkout Source Code
-=======
-      # Checkout Repository
->>>>>>> 68e1091 (dev project)
-      ####################################################
-
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      ####################################################
-      # Configure SSH
-      ####################################################
+      - name: Verify Repository Structure
+        shell: bash
+        run: |
+          set -e
+
+          echo "Current directory:"
+          pwd
+
+          echo "Repository files:"
+          find . -maxdepth 3 -type f | sort
+
+          test -d app/frontend
+          test -d app/backend
+
+          test -f app/frontend/docker-compose.yml
+          test -f app/backend/docker-compose.yml
 
       - name: Configure SSH
         shell: bash
@@ -52,7 +57,6 @@ jobs:
             UserKnownHostsFile /dev/null
             ServerAliveInterval 30
             ServerAliveCountMax 5
-<<<<<<< HEAD
 
           Host backend
             HostName ${{ secrets.DEV_BACKEND_HOST }}
@@ -67,95 +71,58 @@ jobs:
           EOF
 
           chmod 600 ~/.ssh/config
-=======
->>>>>>> 68e1091 (dev project)
 
-          Host backend
-            HostName ${{ secrets.DEV_BACKEND_HOST }}
-            User ${{ secrets.DEV_SSH_USER }}
-            IdentityFile ~/.ssh/github_actions_dev
-            IdentitiesOnly yes
-            ProxyJump frontend
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-            ServerAliveInterval 30
-            ServerAliveCountMax 5
-          EOF
-
-<<<<<<< HEAD
-      ####################################################
-      # Test SSH Connections
-      ####################################################
+          ssh-keygen -lf ~/.ssh/github_actions_dev
 
       - name: Test Frontend SSH
         shell: bash
         run: |
           set -e
-          ssh frontend "echo 'Frontend SSH successful'; hostname; whoami"
+
+          ssh frontend "
+            echo 'Frontend SSH connection successful'
+            hostname
+            whoami
+            id
+          "
 
       - name: Test Backend SSH
         shell: bash
         run: |
           set -e
-          ssh backend "echo 'Backend SSH successful'; hostname; whoami"
-=======
-          chmod 600 ~/.ssh/config
 
-      ####################################################
-      # Test SSH
-      ####################################################
-
-      - name: Test Frontend SSH
-        run: |
-          ssh frontend "hostname && whoami"
-
-      - name: Test Backend SSH
-        run: |
-          ssh backend "hostname && whoami"
->>>>>>> 68e1091 (dev project)
-
-      ####################################################
-      # Prepare Frontend Directory
-      ####################################################
+          ssh backend "
+            echo 'Backend SSH connection successful'
+            hostname
+            whoami
+            id
+          "
 
       - name: Prepare Frontend Directory
-<<<<<<< HEAD
         shell: bash
-=======
->>>>>>> 68e1091 (dev project)
         run: |
+          set -e
+
           ssh frontend <<'EOF'
           set -e
 
           sudo mkdir -p /home/rohit/simple-bank-dev/frontend
-<<<<<<< HEAD
 
           sudo chown -R rohitthakur:rohitthakur \
             /home/rohit/simple-bank-dev
 
           sudo chmod 755 /home/rohit
+
           sudo chmod -R u+rwX,go+rX \
             /home/rohit/simple-bank-dev
-          EOF
 
-      ####################################################
-      # Sync Frontend Files
-      ####################################################
+          echo "Frontend deployment directory prepared:"
+          ls -ld /home/rohit/simple-bank-dev
+          ls -ld /home/rohit/simple-bank-dev/frontend
+          EOF
 
       - name: Sync Frontend Files
         shell: bash
-=======
-          sudo chown -R rohitthakur:rohitthakur /home/rohit/simple-bank-dev
-          sudo chmod 755 /home/rohit
-          sudo chmod -R u+rwX,go+rX /home/rohit/simple-bank-dev
-          EOF
-
-      ####################################################
-      # Sync Frontend
-      ####################################################
-
-      - name: Sync Frontend Files
->>>>>>> 68e1091 (dev project)
         run: |
           set -e
 
@@ -164,86 +131,75 @@ jobs:
             --exclude ".github" \
             --exclude "node_modules" \
             --exclude ".env" \
-<<<<<<< HEAD
-            frontend/ \
-=======
             app/frontend/ \
->>>>>>> 68e1091 (dev project)
             frontend:/home/rohit/simple-bank-dev/frontend/
 
-      ####################################################
-      # Deploy Frontend
-      ####################################################
-
-      - name: Deploy Frontend
+      - name: Verify Frontend Files
         shell: bash
         run: |
+          set -e
+
           ssh frontend <<'EOF'
           set -e
 
           cd /home/rohit/simple-bank-dev/frontend
 
-<<<<<<< HEAD
-          echo "Current directory:"
+          echo "Frontend deployment path:"
           pwd
 
           echo "Frontend files:"
-=======
-          echo "Frontend directory:"
-          pwd
->>>>>>> 68e1091 (dev project)
           ls -la
 
-          docker compose down || true
-          docker compose up -d --build
-
-<<<<<<< HEAD
-          echo "Frontend containers:"
-=======
->>>>>>> 68e1091 (dev project)
-          docker compose ps
+          test -f Dockerfile
+          test -f docker-compose.yml
           EOF
 
-      ####################################################
-      # Prepare Backend Directory
-      ####################################################
+      - name: Deploy Frontend
+        shell: bash
+        run: |
+          set -e
+
+          ssh frontend <<'EOF'
+          set -e
+
+          cd /home/rohit/simple-bank-dev/frontend
+
+          echo "Stopping existing frontend container..."
+          docker compose down || true
+
+          echo "Building and starting frontend..."
+          docker compose up -d --build
+
+          echo "Frontend container status:"
+          docker compose ps
+
+          echo "Frontend container logs:"
+          docker compose logs --tail=50
+          EOF
 
       - name: Prepare Backend Directory
-<<<<<<< HEAD
         shell: bash
-=======
->>>>>>> 68e1091 (dev project)
         run: |
+          set -e
+
           ssh backend <<'EOF'
           set -e
 
           sudo mkdir -p /opt/simple-bank/backend
-<<<<<<< HEAD
 
           sudo chown -R rohitthakur:rohitthakur \
             /opt/simple-bank
 
           sudo chmod -R u+rwX,go+rX \
             /opt/simple-bank
-          EOF
 
-      ####################################################
-      # Sync Backend Files
-      ####################################################
+          echo "Backend deployment directory prepared:"
+          ls -ld /opt/simple-bank
+          ls -ld /opt/simple-bank/backend
+          EOF
 
       - name: Sync Backend Files
         shell: bash
-=======
-          sudo chown -R rohitthakur:rohitthakur /opt/simple-bank
-          sudo chmod -R u+rwX,go+rX /opt/simple-bank
-          EOF
-
-      ####################################################
-      # Sync Backend
-      ####################################################
-
-      - name: Sync Backend Files
->>>>>>> 68e1091 (dev project)
         run: |
           set -e
 
@@ -253,80 +209,77 @@ jobs:
             --exclude "__pycache__" \
             --exclude "*.pyc" \
             --exclude ".env" \
-<<<<<<< HEAD
-            backend/ \
-=======
             app/backend/ \
->>>>>>> 68e1091 (dev project)
             backend:/opt/simple-bank/backend/
 
-      ####################################################
-      # Deploy Backend
-      ####################################################
-
-      - name: Deploy Backend
+      - name: Verify Backend Files
         shell: bash
         run: |
+          set -e
+
           ssh backend <<'EOF'
           set -e
 
           cd /opt/simple-bank/backend
 
-<<<<<<< HEAD
-          echo "Current directory:"
+          echo "Backend deployment path:"
           pwd
 
           echo "Backend files:"
-=======
-          echo "Backend directory:"
-          pwd
->>>>>>> 68e1091 (dev project)
           ls -la
 
-          docker compose down || true
-          docker compose up -d --build
-
-<<<<<<< HEAD
-          echo "Backend containers:"
-=======
->>>>>>> 68e1091 (dev project)
-          docker compose ps
+          test -f Dockerfile
+          test -f docker-compose.yml
+          test -f app.py
+          test -f requirements.txt
           EOF
 
-      ####################################################
-<<<<<<< HEAD
-      # Backend Internal Health Check
-      ####################################################
-
-      - name: Backend Internal Health Check
+      - name: Deploy Backend
         shell: bash
-=======
-      # Backend Health Check
-      ####################################################
-
-      - name: Backend Internal Health Check
->>>>>>> 68e1091 (dev project)
         run: |
+          set -e
+
           ssh backend <<'EOF'
           set -e
 
-<<<<<<< HEAD
-          echo "Waiting for backend..."
-=======
->>>>>>> 68e1091 (dev project)
+          cd /opt/simple-bank/backend
+
+          echo "Stopping existing backend container..."
+          docker compose down || true
+
+          echo "Building and starting backend..."
+          docker compose up -d --build
+
+          echo "Backend container status:"
+          docker compose ps
+
+          echo "Backend container logs:"
+          docker compose logs --tail=50
+          EOF
+
+      - name: Backend Internal Health Check
+        shell: bash
+        run: |
+          set -e
+
+          ssh backend <<'EOF'
+          set -e
+
+          echo "Waiting for backend application..."
           sleep 10
 
-          curl --fail \
+          curl \
+            --fail \
+            --show-error \
+            --silent \
             --retry 10 \
             --retry-delay 5 \
             --retry-connrefused \
             http://127.0.0.1:5000/api/health
-          EOF
 
-      ####################################################
-<<<<<<< HEAD
-      # Public Website Health Check
-      ####################################################
+          echo
+          echo "Backend internal health check passed."
+          EOF
 
       - name: Public Health Check
         shell: bash
@@ -334,30 +287,16 @@ jobs:
           set -e
 
           echo "Waiting for public application..."
-=======
-      # Public Health Check
-      ####################################################
-
-      - name: Public Health Check
-        run: |
-          set -e
-
->>>>>>> 68e1091 (dev project)
           sleep 15
 
-          curl --fail \
+          curl \
+            --fail \
             --show-error \
-<<<<<<< HEAD
             --silent \
-=======
->>>>>>> 68e1091 (dev project)
             --retry 10 \
             --retry-delay 5 \
             --retry-connrefused \
             https://dev.simplebankgcp.biharibabu.info/api/health
 
-<<<<<<< HEAD
           echo
-=======
->>>>>>> 68e1091 (dev project)
           echo "DEV deployment completed successfully."
