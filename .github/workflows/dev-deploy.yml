@@ -13,100 +13,237 @@ jobs:
     environment: dev
 
     steps:
+      ####################################################
+      # Checkout Source Code
+      ####################################################
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      ####################################################
+      # Configure SSH
+      ####################################################
+
       - name: Configure SSH
+        shell: bash
         run: |
+          set -e
+
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          echo "${{ secrets.DEV_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/github_actions_dev
+          echo "${{ secrets.DEV_SSH_PRIVATE_KEY_B64 }}" \
+            | base64 --decode \
+            > ~/.ssh/github_actions_dev
+
           chmod 600 ~/.ssh/github_actions_dev
 
-          ssh-keyscan -H ${{ secrets.DEV_FRONTEND_HOST }} >> ~/.ssh/known_hosts
-
-          cat <<EOF >> ~/.ssh/config
+          cat > ~/.ssh/config <<EOF
           Host frontend
             HostName ${{ secrets.DEV_FRONTEND_HOST }}
             User ${{ secrets.DEV_SSH_USER }}
             IdentityFile ~/.ssh/github_actions_dev
             IdentitiesOnly yes
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            ServerAliveInterval 30
+            ServerAliveCountMax 5
 
           Host backend
             HostName ${{ secrets.DEV_BACKEND_HOST }}
             User ${{ secrets.DEV_SSH_USER }}
-            ProxyJump frontend
             IdentityFile ~/.ssh/github_actions_dev
             IdentitiesOnly yes
+            ProxyJump frontend
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            ServerAliveInterval 30
+            ServerAliveCountMax 5
           EOF
 
           chmod 600 ~/.ssh/config
 
+          ssh-keygen -lf ~/.ssh/github_actions_dev
+
+      ####################################################
+      # Test SSH Connections
+      ####################################################
+
       - name: Test Frontend SSH
+        shell: bash
         run: |
-          ssh frontend "hostname"
+          set -e
+          ssh frontend "echo 'Frontend SSH successful'; hostname; whoami"
 
       - name: Test Backend SSH
+        shell: bash
         run: |
-          ssh backend "hostname"
+          set -e
+          ssh backend "echo 'Backend SSH successful'; hostname; whoami"
+
+      ####################################################
+      # Prepare Frontend Directory
+      ####################################################
+
+      - name: Prepare Frontend Directory
+        shell: bash
+        run: |
+          ssh frontend <<'EOF'
+          set -e
+
+          sudo mkdir -p /home/rohit/simple-bank-dev/frontend
+
+          sudo chown -R rohitthakur:rohitthakur \
+            /home/rohit/simple-bank-dev
+
+          sudo chmod 755 /home/rohit
+          sudo chmod -R u+rwX,go+rX \
+            /home/rohit/simple-bank-dev
+          EOF
+
+      ####################################################
+      # Sync Frontend Files
+      ####################################################
+
+      - name: Sync Frontend Files
+        shell: bash
+        run: |
+          set -e
+
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            --exclude "node_modules" \
+            --exclude ".env" \
+            frontend/ \
+            frontend:/home/rohit/simple-bank-dev/frontend/
 
       ####################################################
       # Deploy Frontend
       ####################################################
 
-      - name: Sync Frontend Files
+      - name: Deploy Frontend
+        shell: bash
         run: |
-          rsync -az --delete \
-            --exclude ".git" \
-            --exclude ".github" \
-            frontend/ \
-            frontend:/home/rohit/simple-bank-dev/frontend/
-
-      - name: Restart Frontend
-        run: |
-          ssh frontend << 'EOF'
+          ssh frontend <<'EOF'
           set -e
 
           cd /home/rohit/simple-bank-dev/frontend
 
+          echo "Current directory:"
+          pwd
+
+          echo "Frontend files:"
+          ls -la
+
           docker compose down || true
           docker compose up -d --build
 
-          docker ps
+          echo "Frontend containers:"
+          docker compose ps
           EOF
+
+      ####################################################
+      # Prepare Backend Directory
+      ####################################################
+
+      - name: Prepare Backend Directory
+        shell: bash
+        run: |
+          ssh backend <<'EOF'
+          set -e
+
+          sudo mkdir -p /opt/simple-bank/backend
+
+          sudo chown -R rohitthakur:rohitthakur \
+            /opt/simple-bank
+
+          sudo chmod -R u+rwX,go+rX \
+            /opt/simple-bank
+          EOF
+
+      ####################################################
+      # Sync Backend Files
+      ####################################################
+
+      - name: Sync Backend Files
+        shell: bash
+        run: |
+          set -e
+
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            --exclude "__pycache__" \
+            --exclude "*.pyc" \
+            --exclude ".env" \
+            backend/ \
+            backend:/opt/simple-bank/backend/
 
       ####################################################
       # Deploy Backend
       ####################################################
 
-      - name: Sync Backend Files
+      - name: Deploy Backend
+        shell: bash
         run: |
-          rsync -az --delete \
-            --exclude ".git" \
-            --exclude ".github" \
-            -e "ssh -J ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} -i ~/.ssh/github_actions_dev -o IdentitiesOnly=yes" \
-            backend/ \
-            ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_BACKEND_HOST }}:/opt/simple-bank/backend/
-
-      - name: Restart Backend
-        run: |
-          ssh backend << 'EOF'
+          ssh backend <<'EOF'
           set -e
 
           cd /opt/simple-bank/backend
 
+          echo "Current directory:"
+          pwd
+
+          echo "Backend files:"
+          ls -la
+
           docker compose down || true
           docker compose up -d --build
 
-          docker ps
+          echo "Backend containers:"
+          docker compose ps
           EOF
 
       ####################################################
-      # Health Check
+      # Backend Internal Health Check
       ####################################################
 
-      - name: Health Check
+      - name: Backend Internal Health Check
+        shell: bash
         run: |
-          sleep 20
-          curl -f https://dev.simplebankgcp.biharibabu.info/api/health
+          ssh backend <<'EOF'
+          set -e
+
+          echo "Waiting for backend..."
+          sleep 10
+
+          curl --fail \
+            --retry 10 \
+            --retry-delay 5 \
+            --retry-connrefused \
+            http://127.0.0.1:5000/api/health
+          EOF
+
+      ####################################################
+      # Public Website Health Check
+      ####################################################
+
+      - name: Public Health Check
+        shell: bash
+        run: |
+          set -e
+
+          echo "Waiting for public application..."
+          sleep 15
+
+          curl --fail \
+            --show-error \
+            --silent \
+            --retry 10 \
+            --retry-delay 5 \
+            --retry-connrefused \
+            https://dev.simplebankgcp.biharibabu.info/api/health
+
+          echo
+          echo "DEV deployment completed successfully."
