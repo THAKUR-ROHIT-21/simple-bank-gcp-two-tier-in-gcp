@@ -1,0 +1,69 @@
+name: Deploy DEV
+
+on:
+  push:
+    branches:
+      - dev
+
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    environment: dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEV_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DEV_FRONTEND_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy Frontend
+        run: |
+          ssh -i ~/.ssh/id_rsa \
+          ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} << 'EOF'
+
+          set -e
+
+          cd /home/rohit/simple-bank-dev
+
+          git fetch origin
+          git checkout dev
+          git reset --hard origin/dev
+
+          cd frontend
+          docker compose down
+          docker compose up -d --build
+
+          EOF
+
+      - name: Deploy Backend
+        run: |
+          ssh \
+          -i ~/.ssh/id_rsa \
+          -J ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} \
+          ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_BACKEND_HOST }} << 'EOF'
+
+          set -e
+
+          cd /home/rohit/simple-bank-dev
+
+          git fetch origin
+          git checkout dev
+          git reset --hard origin/dev
+
+          cd backend
+          docker compose down
+          docker compose up -d --build
+
+          EOF
+
+      - name: Health Check
+        run: |
+          curl -f https://dev.simplebankgcp.biharibabu.info
