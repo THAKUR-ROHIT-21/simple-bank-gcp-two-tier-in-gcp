@@ -10,40 +10,42 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     environment: dev
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Configure SSH
         shell: bash
         run: |
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
 
-          printf "%s" "${{ secrets.DEV_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          echo "${{ secrets.DEV_SSH_PRIVATE_KEY_B64 }}" | base64 --decode > ~/.ssh/github_actions_dev
+          chmod 600 ~/.ssh/github_actions_dev
 
           ssh-keyscan -H ${{ secrets.DEV_FRONTEND_HOST }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
-          ls -la ~/.ssh
-          ssh-keygen -lf ~/.ssh/id_rsa
+          ssh-keygen -lf ~/.ssh/github_actions_dev
 
-      - name: Test SSH Connection
+      - name: Test SSH
         run: |
           ssh \
-          -o StrictHostKeyChecking=no \
-          -i ~/.ssh/id_rsa \
-          ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} \
-          "echo 'SSH Connected Successfully'"
+            -i ~/.ssh/github_actions_dev \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} \
+            "echo 'SSH Connection Successful'"
 
       - name: Deploy Frontend
         run: |
           ssh \
-          -o StrictHostKeyChecking=no \
-          -i ~/.ssh/id_rsa \
-          ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} << 'EOF'
+            -i ~/.ssh/github_actions_dev \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} << 'EOF'
 
           set -e
 
@@ -63,10 +65,11 @@ jobs:
       - name: Deploy Backend
         run: |
           ssh \
-          -o StrictHostKeyChecking=no \
-          -i ~/.ssh/id_rsa \
-          -J ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} \
-          ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_BACKEND_HOST }} << 'EOF'
+            -i ~/.ssh/github_actions_dev \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=no \
+            -J ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} \
+            ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_BACKEND_HOST }} << 'EOF'
 
           set -e
 
