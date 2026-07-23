@@ -13,79 +13,100 @@ jobs:
     environment: dev
 
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Configure SSH
-        shell: bash
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          echo "${{ secrets.DEV_SSH_PRIVATE_KEY_B64 }}" | base64 --decode > ~/.ssh/github_actions_dev
+          echo "${{ secrets.DEV_SSH_PRIVATE_KEY_B64 }}" | base64 -d > ~/.ssh/github_actions_dev
           chmod 600 ~/.ssh/github_actions_dev
 
           ssh-keyscan -H ${{ secrets.DEV_FRONTEND_HOST }} >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
 
-          ssh-keygen -lf ~/.ssh/github_actions_dev
+          cat <<EOF >> ~/.ssh/config
+          Host frontend
+            HostName ${{ secrets.DEV_FRONTEND_HOST }}
+            User ${{ secrets.DEV_SSH_USER }}
+            IdentityFile ~/.ssh/github_actions_dev
+            IdentitiesOnly yes
 
-      - name: Test SSH
+          Host backend
+            HostName ${{ secrets.DEV_BACKEND_HOST }}
+            User ${{ secrets.DEV_SSH_USER }}
+            ProxyJump frontend
+            IdentityFile ~/.ssh/github_actions_dev
+            IdentitiesOnly yes
+          EOF
+
+          chmod 600 ~/.ssh/config
+
+      - name: Test Frontend SSH
         run: |
-          ssh \
-            -i ~/.ssh/github_actions_dev \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=no \
-            ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} \
-            "echo 'SSH Connection Successful'"
+          ssh frontend "hostname"
 
-      - name: Deploy Frontend
+      - name: Test Backend SSH
         run: |
-          ssh \
-            -i ~/.ssh/github_actions_dev \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=no \
-            ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} << 'EOF'
+          ssh backend "hostname"
 
+      ####################################################
+      # Deploy Frontend
+      ####################################################
+
+      - name: Sync Frontend Files
+        run: |
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            frontend/ \
+            frontend:/home/rohit/simple-bank-dev/frontend/
+
+      - name: Restart Frontend
+        run: |
+          ssh frontend << 'EOF'
           set -e
 
-          cd /home/rohit/simple-bank-dev
-
-          git fetch origin
-          git checkout dev
-          git reset --hard origin/dev
-
-          cd frontend
+          cd /home/rohit/simple-bank-dev/frontend
 
           docker compose down || true
           docker compose up -d --build
 
+          docker ps
           EOF
 
-      - name: Deploy Backend
-        run: |
-          ssh \
-            -i ~/.ssh/github_actions_dev \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=no \
-            -J ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} \
-            ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_BACKEND_HOST }} << 'EOF'
+      ####################################################
+      # Deploy Backend
+      ####################################################
 
+      - name: Sync Backend Files
+        run: |
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            -e "ssh -J ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_FRONTEND_HOST }} -i ~/.ssh/github_actions_dev -o IdentitiesOnly=yes" \
+            backend/ \
+            ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_BACKEND_HOST }}:/opt/simple-bank/backend/
+
+      - name: Restart Backend
+        run: |
+          ssh backend << 'EOF'
           set -e
 
-          cd /home/rohit/simple-bank-dev
-
-          git fetch origin
-          git checkout dev
-          git reset --hard origin/dev
-
-          cd backend
+          cd /opt/simple-bank/backend
 
           docker compose down || true
           docker compose up -d --build
 
+          docker ps
           EOF
+
+      ####################################################
+      # Health Check
+      ####################################################
 
       - name: Health Check
         run: |
-          curl -f https://dev.simplebankgcp.biharibabu.info
+          sleep 20
+          curl -f https://dev.simplebankgcp.biharibabu.info/api/health
