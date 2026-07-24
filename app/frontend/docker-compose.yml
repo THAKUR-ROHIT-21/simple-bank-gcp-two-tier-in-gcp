@@ -1,7 +1,15 @@
 services:
   frontend:
-    build: .
+    build:
+      context: .
     container_name: simple-bank-frontend
     restart: unless-stopped
+<<<<<<< Updated upstream
     env_file: [.env]
     ports: ["127.0.0.1:8080:80"]
+=======
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8080:80"
+>>>>>>> Stashed changes
